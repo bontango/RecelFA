@@ -11,6 +11,7 @@
 -- v04 added error blinkcode
 -- v05 reset_l & 10Kbyte read
 -- v06 wait 0.5 ec before start cpu
+-- v07 added variable for sectorcount as large sectornumbers were calculated wrong
 
 library IEEE;
 use IEEE.std_logic_1164.all;
@@ -149,8 +150,10 @@ SD_CARD_READ: entity work.SPI_Master --read i byte by byte (slooow)
 			constant CMD12 : std_LOGIC_VECTOR (47 downto 0) := x"4C00000000FF"; --stop to read data
 			constant CMD58 : std_LOGIC_VECTOR (47 downto 0) := x"7A00000000FF"; --read OCR
 			
-		begin
-		if rising_edge(i_Clk) then
+			variable sectorcount: integer range 0 to 10000;
+			variable gamenumber: integer range 0 to 255;
+
+		begin		
 			if i_Rst_L = '0' then --Reset condidition (reset_l)    
 				cpu_reset_l <= '0';
 				TX_Start_A <= '0';		
@@ -167,7 +170,7 @@ SD_CARD_READ: entity work.SPI_Master --read i byte by byte (slooow)
 				counter <= 0;
 				attempts <= 0;
 				state_A <= Startdelay;    
-			else			
+			elsif rising_edge(i_Clk) then
 				case state_A is
 				-- STATE MASCHINE ----------------
 				 when Startdelay => 
@@ -194,8 +197,11 @@ SD_CARD_READ: entity work.SPI_Master --read i byte by byte (slooow)
 									 -- where to read rom dependign on dip switch
 									 -- first rom starts at sector 660
 									 -- we have 10KByte of data
-									 -- which is 20 sectors 512Byte each
-									 TX_Data_A(79 downto 64)  <= std_logic_vector (unsigned(selection) *20 + 660);											 									 
+									 -- calculate startsector ( 20 sectors a 512 Byte)
+									 gamenumber := to_integer(unsigned(selection));									 
+									 sectorcount := gamenumber * 20 + 660;									 
+									 TX_Data_A(79 downto 64)  <= std_logic_vector(to_unsigned(sectorcount, 16));									 
+									 --TX_Data_A(79 downto 64)  <= std_logic_vector (unsigned(selection) *20 + 660);										 
 						when 8 => TX_Data_A <= x"FF" & CMD12 & x"FFFFFFFFFFFFFF";	
 									 do_not_disable_SS <= '0';	
 						when others => TX_Data_A <= x"FF" & x"FFFFFFFFFFFF" & x"FFFFFFFFFFFFFF"; --  read
@@ -379,7 +385,6 @@ SD_CARD_READ: entity work.SPI_Master --read i byte by byte (slooow)
 
 					
 				end case;	
-			end if; --rst 
 		end if; --rising edge					
 	end process;
 				

@@ -16,6 +16,7 @@
 -- v03 IO 0 fix set to input
 -- v04 negated accu again
 -- v05 OK?
+-- v06 tests but looking good
 --*****************************************************************************
 
 library ieee;
@@ -45,6 +46,7 @@ architecture fsm of rA1761 is
     --   FSM states
   type state_t is ( wait_cs, assign, wait_io_finish );
   signal state : state_t;
+  signal port_state : std_logic; --1=enabled 0=disabled
 
 begin  
   
@@ -54,6 +56,7 @@ begin
 		if ( reset = '0') then -- Asynchronous reset
 		   --   output and variable initialisation		
 			io_port_out     <= ( others => '0');
+			port_state <= '0';
 			state <= wait_cs;
 		elsif rising_edge( clk) then  -- Synchronous FSM
 		   	 case state is
@@ -62,54 +65,49 @@ begin
 				 if (device_id = io_device) and ( w_io = '1' ) then
 					state <= assign;
 				 end if;					 
-				 ---- State 2 assign values to out and read in (depends on cmd) -- four commands
+				 -- State 2 assign values to out and read in (depends on cmd) -- four commands
+				 -- remember that io_accu is inverted accu due to IOL command
 				 when assign =>
 					----------------------------------------------------------
-					-- SES 1 - select enable status, enable all outputs
+					-- SES 0 - select enable status, disable all outputs 					
 					----------------------------------------------------------					
 					if (io_cmd(0)='0') and (io_accu(3)='1') then 
-						if io_port_in( to_integer(unsigned(io_port))) = '1' then 	
-							io_data <= '1' & io_accu(2 downto 0); 													
-						else							
-							io_data <= '0' & io_accu(2 downto 0); 
-						end if;	
+						port_state <= '0';
 					----------------------------------------------------------
-					-- SES 0 - select enable status, disable all outputs (same as SES1 at the moment !!! )
+					-- SES 1 - select enable status, enable all outputs					
 					----------------------------------------------------------					
 					elsif (io_cmd(0)='0') and (io_accu(3)='0') then 
-						if io_port_in( to_integer(unsigned(io_port))) = '1' then
-							io_data <= '1' & io_accu(2 downto 0); 
-						else
-							io_data <= '0' & io_accu(2 downto 0); 
-						end if;
+						port_state <= '1'; 
 					----------------------------------------------------------
-					-- SOS 1 - select output status, port->1
+					-- SOS 0 - select output status, port->0					
 					----------------------------------------------------------					
 					elsif (io_cmd(0)='1') and (io_accu(3)='1') then 
-						io_port_out( to_integer(unsigned(io_port))) <= '1';	
-						-- IO 0 is input, give back real status here
-						if ( io_port = "0000") then
-								if io_port_in(0) = '1' then 
-									io_data <= "1111";
-								else
-									io_data <= "0000";
-								end if;	
-						else		
-							io_data <= "0000";
-						end if;	
+						if port_state = '1' then
+							io_port_out( to_integer(unsigned(io_port))) <= '1'; -- TTL logik, set port to '1' !
+						end if;
+
+						io_data <= "0000";
+
 					----------------------------------------------------------
-					-- SOS 0 - select output status, port->0
+					-- SOS 1 - select output status, port->1 					
 					----------------------------------------------------------					
 					elsif (io_cmd(0)='1') and (io_accu(3)='0') then 
-							io_port_out( to_integer(unsigned(io_port))) <= '0';						
+							if port_state = '1' then
+								io_port_out( to_integer(unsigned(io_port))) <= '0'; -- TTL logik, set port to '1' !
+							end if;
+						-- IO 0 is input, Recel do read with SOS 1: give back real status here							
 						if ( io_port = "0000") then
-								if io_port_in(0) = '1' then 
-									io_data <= "1111";
-								else
-									io_data <= "0000";
-								end if;	
+							if ( io_port_out(0) = '1' ) then -- last setting was SOS 0
+										io_data <= "1111";
+							else	
+									if io_port_in(0) = '1' then 
+										io_data <= "0111"; -- "0000"; RTH
+									else
+										io_data <= "1111";
+									end if;	
+							end if;		
 						else		
-							io_data <= "1111";
+								io_data <= "1111";
 						end if;	
 					end if;	
 						state <= wait_io_finish;

@@ -12,7 +12,9 @@
 -- Notes
 -- only IO section implemented
 -- adapted to recel system3 hardware
--- v04
+-- v02 no negated accu with CPU v08
+-- v03 IO 0 fix set to input
+-- v04 negated accu again
 -- v05 OK?
 --*****************************************************************************
 
@@ -43,6 +45,7 @@ architecture fsm of rA17xx is
     --   FSM states
   type state_t is ( wait_cs, assign, wait_io_finish );
   signal state : state_t;
+  signal port_state : std_logic; --1=enabled 0=disabled
 
 begin  
   
@@ -52,6 +55,7 @@ begin
 		if ( reset = '0') then -- Asynchronous reset
 		   --   output and variable initialisation		
 			io_port_out     <= ( others => '0');
+			port_state <= '0';
 			state <= wait_cs;
 		elsif rising_edge( clk) then  -- Synchronous FSM
 		   	 case state is
@@ -60,49 +64,46 @@ begin
 				 if (device_id = io_device) and ( w_io = '1' ) then
 					state <= assign;
 				 end if;					 
-				 ---- State 2 assign values to out and read in (depends on cmd) -- four commands
+				 -- State 2 assign values to out and read in (depends on cmd) -- four commands
+				 -- remember that we see inverted accu ue to IOL command
 				 when assign =>
 					----------------------------------------------------------
 					-- SES 1 - select enable status, enable all outputs
 					----------------------------------------------------------					
 					if (io_cmd(0)='0') and (io_accu(3)='1') then 
-						-- give back ( 4bit) status of port_out value						
-						if io_port_in( to_integer(unsigned(io_port))) = '1' then 
-							io_data <= '1' & io_accu(2 downto 0); 
-							--io_data <= "1000";
-						else
-							io_data <= '0' & io_accu(2 downto 0);
-							--io_data <= "0000";
-						end if;	
+						port_state <= '0';
 					----------------------------------------------------------
-					-- SES 0 - select enable status, disable all outputs (same as SES1 at the moment !!! )
+					-- SES 0 - select enable status, disable all outputs 
 					----------------------------------------------------------					
 					elsif (io_cmd(0)='0') and (io_accu(3)='0') then 
-						-- give back (4bit) status of port_out value						
-						if io_port_in( to_integer(unsigned(io_port))) = '1' then
-							io_data <= '1' & io_accu(2 downto 0); 
-							--io_data <= "1000";
-						else
-							io_data <= '0' & io_accu(2 downto 0);
-							--io_data <= "0000";	
-						end if;
+						port_state <= '1'; 
 					----------------------------------------------------------
 					-- SOS 1 - select output status, port->1
 					----------------------------------------------------------					
 					elsif (io_cmd(0)='1') and (io_accu(3)='1') then 
-						io_port_out( to_integer(unsigned(io_port))) <= '1';							
-						--io_data <= not io_accu;
-						io_data <= "0000";
+						if port_state = '1' then
+							io_port_out( to_integer(unsigned(io_port))) <= '1';
+						end if;
+						-- IO15 is connected to +5V !!!	
+						if ( io_port = "1111") then
+								io_data <= "1111";
+						else															
+								io_data <= "0000";
+						end if;
 					----------------------------------------------------------
 					-- SOS 0 - select output status, port->0
 					----------------------------------------------------------					
 					elsif (io_cmd(0)='1') and (io_accu(3)='0') then 
-							io_port_out( to_integer(unsigned(io_port))) <= '0';						
-							--io_data <= not io_accu;
-							io_data <= "1111";
-					end if;
-					state <= wait_io_finish;
-					
+							if port_state = '1' then
+								io_port_out( to_integer(unsigned(io_port))) <= '0';
+							end if;
+							
+								io_data <= "1111";						
+					end if;	
+						state <= wait_io_finish;
+					----------------------------------------------------------
+					-- io finish
+					----------------------------------------------------------										
 				 when wait_io_finish =>
 				 ---- State 3 wait for current iio cycle to be finished
 				 if ( w_io = '0' ) then 

@@ -57,7 +57,7 @@ use work.instruction_buffer_type.all;
 	 
   begin
 	
-  boot_message: process (display1, display2, display3, display4)
+  boot_message: process (display1, display2, display3, display4, error_display4, is_error)
     begin
 	 				DISP_REG_A(15) <= "1111"; 
 					DISP_REG_A(14) <= "1111"; 

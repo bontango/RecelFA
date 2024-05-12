@@ -19,6 +19,9 @@
 -- v0.5 SAG added (according to pps4.cpp from mame)
 -- v0.6 IOL corrected, now we exchange negated accu
 -- v0.7 ADSK implemented according datasheet (again)
+-- v0.8 bug resolved for 'T'
+-- v0.9 skip modified to skip one cycle independent of one or two word following ( thx to Philipp for the hint )
+-- v0.91 PC_lo is alias for PC(5 downto 0), only PC_lo is incremented ( PPS4_2 pages )
 --*****************************************************************************
 
 library ieee;
@@ -35,7 +38,7 @@ entity pps4 is
 		  io_accu    : out std_logic_vector( 3 downto 0); -- accu for input to IO device
 		  io_port    : out std_logic_vector( 3 downto 0); -- port of IO device (BL)
         d_in    : in  std_logic_vector( 7 downto 0); -- Instruction/Data Bus		  
-        addr    : out std_logic_vector( 11 downto 0); -- program counter (ROM address)		  
+        addr    : buffer std_logic_vector( 11 downto 0); -- program counter (ROM address)		  
         di_a    : in std_logic_vector( 3 downto 0); -- discrete Input Group A
 		  di_b    : in std_logic_vector( 3 downto 0); -- discrete Input Group B
         do_a	 : out std_logic_vector( 3 downto 0); -- discrete output ( DOA <- A)
@@ -133,6 +136,8 @@ architecture fsm of pps4 is
   signal accu    : std_logic_vector( 3 downto 0); -- Accumulator
   signal xreg    : std_logic_vector( 3 downto 0); --Secondary Accumulator Register		
   signal PC      : std_logic_vector( 11 downto 0); -- Program counter needed
+  alias  PC_lo   : STD_LOGIC_VECTOR(5 DOWNTO 0) is PC(5 DOWNTO 0);
+  alias  PC_hi   : STD_LOGIC_VECTOR(5 DOWNTO 0) is PC(11 DOWNTO 6);
   
   signal SA      : std_logic_vector( 11 downto 0); --Save Registers, SA
   signal SB      : std_logic_vector( 11 downto 0); --Save Registers, SB
@@ -177,7 +182,6 @@ begin  --  fsm
 			PC       <= ( others => '0');
 			addr      <= ( others => '0');
 			accu     <= ( others => '0');
-			PC       <= ( others => '0');
 			do_a     <= ( others => '0');
 			do_b     <= ( others => '0');
 			m_SAG    <= x"FFF";
@@ -197,8 +201,8 @@ begin  --  fsm
 			  --------------------------------			  
 			  when load_opcode =>
 			    I <= d_in; -- assign instruction for later use
-				 op_code <= to_integer(unsigned(d_in)); -- Load the op-code				 
-				 PC <= std_logic_vector( unsigned(PC) + 1 );	-- Increment the program counter			
+				 op_code <= to_integer(unsigned(d_in)); -- Load the op-code						 
+				 PC_lo <= std_logic_vector( unsigned(PC_lo) + 1 ); -- Increment the program counter ( low only!)
 				 -- check LB and LBI flags
 				 if (wasLB >0) then wasLB <= wasLB -1; end if;
 				 if (wasLDI >0) then wasLDI <= wasLDI -1; end if;
@@ -561,8 +565,8 @@ begin  --  fsm
 					--------------------------------																	
 					-- 'T'  transfer
 					--------------------------------											
-					when T_from to T_to =>    						
-						PC(5 downto 0) <= I(5 downto 0);
+					when T_from to T_to =>    		
+						PC_lo <= I(5 downto 0); 
 						addr(5 downto 0) <= I(5 downto 0);						
 						state <= load_opcode; 	-- next instruction
 					--------------------------------																	
@@ -571,8 +575,8 @@ begin  --  fsm
 					when TM_from to TM_to =>    						
 						SB <= SA;							
 						SA <= PC; -- already advanced here
-						PC(11 downto 6) <= "000011";
-						PC(5 downto 0) <= I(5 downto 0);							
+						PC_hi <= "000011";
+						PC_lo <= I(5 downto 0);							
 						addr(11 downto 6) <= "000011";
 						addr(5 downto 0) <= I(5 downto 0);							
 						state <= sec_cycle; -- second cycle								
@@ -636,8 +640,6 @@ begin  --  fsm
 					-- 'RTNSK'  return and skip
 					--------------------------------											
 					when RTNSK  =>    
-					   -- datasheet says PC=PC+1 but we need to 'skip' in case of 2cycle cmd after RTN
-						-- ( thx for the hint in gts1.c from pinmame)
 						PC <= SA;						
 						addr <= SA;						
 						SA <= SB;
@@ -652,8 +654,7 @@ begin  --  fsm
 					-- 'IOL'  Input / Output Long (2 cycles)
 					--------------------------------											
 					when IOL =>    					   
-						addr <= PC;	-- set address	(PC already incremented, so pointing to argument)
-						--PC <= std_logic_vector( unsigned(PC) + 1 );	-- Increment the program counter															
+						addr <= PC;	-- set address	(PC already incremented, so pointing to argument)						
 						state <= sec_cycle; -- second cycle			
 					--------------------------------																	
 					-- 'DIA'  discrete input Group A
@@ -703,7 +704,7 @@ begin  --  fsm
 						B(7 downto 0) <= not d_in;		-- inverted in this case
 					end if;
 						wasLB <= 2;
-						PC <= std_logic_vector( unsigned(PC) + 1 );	-- Increment the program counter				 				 
+						PC_lo <= std_logic_vector( unsigned(PC_lo) + 1 );	-- Increment the program counter				 				 
 						
 					when TM_from to TM_to =>    						
 						PC(11 downto 8) <= "0001";
@@ -715,7 +716,8 @@ begin  --  fsm
 
 					when TML_from to TML_to =>    						
 						SB <= SA;
-						SA <= std_logic_vector( unsigned(PC) + 1 ); -- +1 because it has 2 words
+						SA(11 downto 6) <= PC_hi;
+						SA(5 downto 0) <= std_logic_vector( unsigned(PC_lo) + 1 ); -- +1 because it has 2 words
 						PC(11 downto 8) <= I(3 downto 0);
 						PC(7 downto 0) <= d_in;
 					
@@ -727,11 +729,11 @@ begin  --  fsm
 						io_accu <= not accu; -- negated!
 						
 						w_io <= '1';
-						PC <= std_logic_vector( unsigned(PC) + 1 );	-- Increment the program counter				 				 
+						PC_lo <= std_logic_vector( unsigned(PC_lo) + 1 );	-- Increment the program counter				 				 
 						
 					when others =>
 						-- nop
-						PC <= std_logic_vector( unsigned(PC) + 1 );	-- Increment the program counter				 				 
+						PC_lo <= std_logic_vector( unsigned(PC_lo) + 1 );	-- Increment the program counter				 				 
 
 				 end case;  --  opcode	             	
 				 
@@ -753,26 +755,10 @@ begin  --  fsm
 						state <= load_opcode; 	-- next instruction
 					 end case;  --  opcode	             		
 			  --------------------------------				 
-			  -- special state, skip a instruction
+			  -- special state, skip a cycle
 			  --------------------------------				
 			  when skip_it =>
-			      -- do we need to skip second instruction only (not all 2cycle codes, only those with 2 rom codes)
-				   case op_code is
-						when LBL =>
-							PC <= std_logic_vector( unsigned(PC) + 1 );	-- Increment the program counter				 				 
-							addr <= std_logic_vector( unsigned(PC) + 1 );
-						when TL_from to TL_to =>    													
-							PC <= std_logic_vector( unsigned(PC) + 1 );	-- Increment the program counter				 				 
-							addr <= std_logic_vector( unsigned(PC) + 1 );							
-						when TML_from to TML_to =>    													
-							PC <= std_logic_vector( unsigned(PC) + 1 );	-- Increment the program counter				 				 
-							addr <= std_logic_vector( unsigned(PC) + 1 );							
-						when IOL =>    													
-							PC <= std_logic_vector( unsigned(PC) + 1 );	-- Increment the program counter				 				 
-							addr <= std_logic_vector( unsigned(PC) + 1 );							
-						when others =>
-							addr <= PC; -- assign program counter to addressbus	
-					end case;										
+					addr <= PC; -- assign (already incremented) program counter to addressbus	
 					skip <= '0'; -- reset skip flag
 					state <= load_opcode; 	-- next instruction
 					

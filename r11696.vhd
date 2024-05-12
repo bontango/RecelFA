@@ -29,10 +29,23 @@
 -- all ports configured as outputs
 -- fix return values for 'IN' groups (last setting of associated pair)
 -- implemented commands
+-- D0 -> sets group 3 : Coil #C,#D,#E,#F
+-- D1 -> sets group 4 : coil #8,#9,#A,#B
+-- D2 -> sets group 5 : sound5, NU, COIL Knocker (#6), COIL Ball Home(#7) 
+-- D3 -> sets group 6 : sound 1..4
 -- D4 -> sets group 7 : Bonus Bits A..D
 -- D5 -> sets Group 8 : L71,L72,L74, play signal
+-- On a write operation, the returned value (placed in A) is the state of the port before the call
+--
+--
 -- D6 -> sets port x to ON x=0..15 Group 6,5,4,3 (sound&coils)
 -- DB -> sets port x to OFF x=0..15 Group 6,5,4,3 (sound&coils)
+--
+--
+--Returned value is the bit# inside the group that was just modified. (80% certainty. Not sure 100%)
+--
+-- v0.2 with corrected assignments for group 3,4,5,6
+-- v0.3 modified return values
 --*****************************************************************************
 
 library ieee;
@@ -98,47 +111,65 @@ begin
 					-- possible commands
 					case to_integer(unsigned(io_cmd)) is
 						when 16#00# => 
+							sound_and_coils_out(15) <= not io_accu(0);-- set with negated accu 
+							sound_and_coils_out(14) <= not io_accu(1);-- set with negated accu 
+							sound_and_coils_out(13) <= not io_accu(2);-- set with negated accu 
+							sound_and_coils_out(12) <= not io_accu(3);-- set with negated accu 
 							io_accu_D0 <= io_accu;
-							io_data <= "0000"; --give feedback 
+							io_data <= io_accu_D0; --give feedback 
 						when 16#08# => 
 							io_data <= io_accu_D0; 
 
 						when 16#01# => 
+							sound_and_coils_out(11) <= not io_accu(0);-- set with negated accu 
+							sound_and_coils_out(10) <= not io_accu(1);-- set with negated accu 
+							sound_and_coils_out(9) <= not io_accu(2);-- set with negated accu 
+							sound_and_coils_out(8) <= not io_accu(3);-- set with negated accu 
 							io_accu_D1 <= io_accu;
-							io_data <= "0000"; --give feedback 
+							io_data <= io_accu_D1; --give feedback 
 						when 16#09# => 
 							io_data <= io_accu_D1; 
 
 						when 16#02# => 
+							sound_and_coils_out(7) <= not io_accu(0);-- set with negated accu 
+							sound_and_coils_out(6) <= not io_accu(1);-- set with negated accu 
+							sound_and_coils_out(5) <= not io_accu(2);-- set with negated accu 
+							sound_and_coils_out(4) <= not io_accu(3);-- set with negated accu 
 							io_accu_D2 <= io_accu;
-							io_data <= "0000"; --give feedback 
+							io_data <= io_accu_D2; --give feedback 
 						when 16#0A# => 
 							io_data <= io_accu_D2; 
 
 						when 16#03# => 
+							sound_and_coils_out(3) <= not io_accu(0);-- set with negated accu 
+							sound_and_coils_out(2) <= not io_accu(1);-- set with negated accu 
+							sound_and_coils_out(1) <= not io_accu(2);-- set with negated accu 
+							sound_and_coils_out(0) <= not io_accu(3);-- set with negated accu 
 							io_accu_D3 <= io_accu;
-							io_data <= "0000"; --give feedback 
+							io_data <= io_accu_D3; --give feedback 
 						when 16#0F# => 
 							io_data <= io_accu_D3; 
 							
 						when 16#04# => 
 							group_7_out <= not io_accu;-- set with negated accu 
 							io_accu_D4 <= io_accu; 
-							io_data <= "0000"; --give feedback 
+							io_data <= io_accu_D4; --give feedback 
 						when 16#0C# => 
 							io_data <= io_accu_D4; 
 							
 						when 16#05# => 
 							group_8_out <= not io_accu; -- set with negated accu
 							io_accu_D5 <= io_accu; 
-							io_data <= "0000"; --give feedback 
+							io_data <= io_accu_D5; --give feedback 
 						when 16#0D# => 
 							io_data <= io_accu_D5; 
 	
 						when 16#06# => 
 							sound_and_coils_out( to_integer(unsigned(not io_accu))) <= '1';	
+							io_data <= "1111"; --give feedback 
 						when 16#0B# => 
 							sound_and_coils_out( to_integer(unsigned(not io_accu))) <= '0';	
+							io_data <= "0000"; --give feedback 
 							
 						when others =>
 							io_data <= "0000"; --give feedback 

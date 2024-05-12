@@ -71,28 +71,28 @@ USE ieee.std_logic_1164.all;
 						state <= Read7;																					
 					when Read7 =>
 						game_option(6) <= return_sig;
-						dip_strobe <= "111101111101";
+						dip_strobe <= "111101111111";
 						state <= Read8;
 					when  Read8 =>
 						game_option(5) <= return_sig;
-						dip_strobe <= "111011111011";
+						dip_strobe <= "111011111111";
 						state <= Read9;
 					when  Read9 =>
 						game_option(4) <= return_sig;
-						dip_strobe <= "110111110111";
+						dip_strobe <= "110111111111";
 						state <= Read10;
 					when  Read10 =>
 						game_option(3) <= return_sig;
-						dip_strobe <= "101111101111";						
+						dip_strobe <= "101111111111";						
 						state <= Read11;						
 					when  Read11 =>
 						game_option(2) <= return_sig;
-						dip_strobe <= "011111011111";						
+						dip_strobe <= "011111111111";						
 						state <= Read12;											
 					when  Read12 =>
 						game_option(1) <= return_sig;
 						dip_strobe <= ( others => '0');					
-						state <= Idle;																	
+						state <= Idle;																							
 					when  Idle =>		
 						dip_strobe <= ( others => '0');									
 						done <= '1'; -- set after first round						
