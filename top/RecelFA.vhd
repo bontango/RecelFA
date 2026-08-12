@@ -56,6 +56,10 @@
 -- v2.02 converted to Cyclone 10 ( 10CL006YE144C8G ) plus Claude optimizations
 -- v2.03 DFPlayer_Mini_CMD v0.6, timing constraints reworked, dead signals removed
 --
+-- v1.04 & v2.04 gemeinsamer Sourcebaum fuer beide Varianten; Cyclone IV bekommt die
+--               reparierten Timing-Constraints und die HDL-Cleanups nachgezogen,
+--               Portmaps und ungenutzte Eingaenge bereinigt (verhaltensneutral)
+--
 -- ONE top level for every RecelFA board. What a board is differs in exactly two
 -- places: variants/<name>/pins.tcl (the pin locations) and
 -- variants/<name>/variant_pkg.vhd (BOARD_ID). There is no board specific copy of

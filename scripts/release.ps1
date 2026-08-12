@@ -63,9 +63,15 @@ foreach ($dir in $dirs) {
 # Dateiname wie bisher gepflegt (grosses C) - git ist gross/klein-empfindlich.
 $log   = Join-Path $BinRoot 'Changelog.txt'
 $stamp = Get-Date -Format 'yyyy-MM-dd HH:mm'
-$lines = @('', "$stamp  version .$sub1.$sub2", "  $Note")
+
+# Kopfzeile im gewachsenen Stil dieser Datei ("-- v1.03 & v2.03 <Text>"), damit die
+# Versionshistorie eine ueberfliegbare Liste bleibt. Darunter je Variante eine
+# Nachweiszeile mit Artefakt und Pruefsumme - die fehlte bisher, und genau deshalb
+# ist einmal unbemerkt eine .jic ausgeliefert worden, die nicht enthielt, was hier stand.
+$headVers = (($done | Sort-Object Version | ForEach-Object { 'v{0}.{1}{2}' -f $_.Version.Split('.')[0], $sub1, $sub2 }) -join ' & ')
+$lines = @('', "-- $headVers $Note", "   $stamp")
 foreach ($d in ($done | Sort-Object Variant)) {
-    $lines += "  {0,-16} {1,-8} {2}  sha256:{3}" -f $d.Variant, $d.Version, $d.File, $d.Sha
+    $lines += "   {0,-16} {1,-8} {2}  sha256:{3}" -f $d.Variant, $d.Version, $d.File, $d.Sha
 }
 Add-Content -Path $log -Value $lines -Encoding UTF8
 
