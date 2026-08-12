@@ -1,0 +1,5 @@
+-- v1.00 for Hardware v1.00 (changed some ports, eeprom instead of fram, .. )
+-- v1.01 solved 'no internal Sound' bug for some games ( e.g. Crazy Race )
+-- v1.02 changed background sond handling in DFPlayer_Mini_CMD
+-- v2.02 for Cyclone 10
+-- v1.03 & v2.03 DFPlayer_Mini_CMD v0.6: complete frames with checksum, for clone modules & 5s startup delay for slow modules

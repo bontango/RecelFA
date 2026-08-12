@@ -1,0 +1,29 @@
+# Zeilenenden.
+#
+# Der ganze Baum ist heute einheitlich CRLF (er stammt aus EINER Quelle, dem alten
+# Ordner source_RecelFA_cyclone_IV_v4). Trotzdem reicht "* -text" nicht: das haelt nur
+# git davon ab, etwas zu aendern, nicht die Werkzeuge. Auf Windows kippen Editoren und
+# Skripte Dateien beim Speichern - und dann landet jede als Ganzdatei-Diff im Commit.
+# Beim Umbau ist genau das passiert: `sed -i` aus der Git-Bash hat CRLF zu LF gemacht
+# und ein Ein-Zeilen-Diff sah aus wie ein Totalumbau.
+#
+# Deshalb "text=auto": git normalisiert BEIM EINCHECKEN auf LF, checkt aber mit der
+# Plattformkonvention aus - im Arbeitsverzeichnis bleibt also CRLF, wie Quartus und
+# die Windows-Editoren es erwarten, und die Diffs bleiben sauber.
+# (Das Atari-Repo benutzt eol=lf und schreibt damit auch das Arbeitsverzeichnis auf LF;
+#  fuer diesen Baum ist native die kleinere Aenderung.)
+* text=auto
+
+*.sof binary
+*.jic binary
+*.pof binary
+*.rbf binary
+*.rpd binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.pdf binary
+*.xlsx binary
+*.zip binary
+*.exe binary
+*.img binary
