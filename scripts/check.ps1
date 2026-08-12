@@ -38,8 +38,15 @@ $QuartusBin = 'C:\intelFPGA_lite\22.1std\quartus\bin64'
 
 # Gemessene Streuung des Slack bei byte-gleichen Quellen liegt ueber 1 ns, deshalb
 # Toleranz statt Gleichheit - plus einen absoluten Boden, unter dem immer gemeldet wird.
+#
+# Der Boden ist PROJEKTSPEZIFISCH und darf nicht aus einem anderen Baum uebernommen werden.
+# Verglichen wird der schlechteste Slack ueber alle Analysearten, und das ist bei RecelFA
+# immer ein HOLD-Wert - Hold ist eine Min-Delay-Pruefung, die der Fitter durch Einfuegen
+# von Verzoegerung gerade eben erfuellt; ~0,14 ns sind dort der Normalzustand, nicht knapp.
+# Der Setup-Slack liegt bei komfortablen +6 bis +7 ns. Ein aus AtariFA uebernommener Boden
+# von 1,0 ns hat deshalb bei JEDEM Lauf gefeuert und den Test wertlos gemacht.
 $SlackTolerance = 1.5
-$SlackFloor     = 1.0
+$SlackFloor     = 0.05
 
 if (-not $NoGen) { & (Join-Path $ScriptDir 'gen_qsf.ps1') -Quiet }
 

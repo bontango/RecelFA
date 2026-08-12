@@ -1,8 +1,18 @@
 # RecelFA – Timing & Compile-Warnungen
 
-Dokumentation der Timing-Constraint-Überarbeitung und Warning-Bereinigung
-(Stand 2026-06-30, Quartus Prime 22.1std.2 Lite, Cyclone 10 LP `10CL006YE144C8G`,
-Top-Entity `RecelFA`).
+Dokumentation der Timing-Constraint-Überarbeitung und Warning-Bereinigung.
+Quartus Prime 22.1std.2 Lite, Top-Entity `RecelFA`.
+
+**Zwei Etappen:**
+
+| Stand | Was | Gilt für |
+|---|---|---|
+| 2026-06-30 | SDC-Überarbeitung + HDL-Cleanups, 30 → 16 Meldungen | zunächst nur Cyclone 10 |
+| 2026-08-12 | Umbau in den gemeinsamen Sourcebaum, Partial Association und `S3`/`S6` behoben, 16 → **8** Meldungen, **keine Critical Warning mehr** | **beide** Varianten |
+
+Aktueller Stand beider Varianten: 8 Meldungen, 0 Critical Warnings, Timing geschlossen
+(worst slack +0,138 ns `cyclone_iv_v4`, +0,141 ns `cyclone_10`, jeweils Hold, Slow 85 °C).
+Der Abschnitt „Ausgangslage" unten beschreibt die Lage **vor** dem 30.06.2026.
 
 ## Ausgangslage
 
@@ -91,34 +101,72 @@ als gegenseitig asynchron deklariert (langsame, quasi-statische CDC).
 Alle Änderungen sind verhaltensneutral (tote Signale, Init-Werte, `open`-Mappings);
 die SDC ändert nur die Timing-**Analyse**, nicht die erzeugte Logik.
 
-## Verbleibende 16 Warnungen – bewusst akzeptiert
+## Etappe 2 (2026-08-12) – behoben im gemeinsamen Sourcebaum
 
-Diese sind beabsichtigt bzw. durch die Quartus **Lite** Edition / Hardware bedingt und
-wurden **nicht** geändert:
+### `Critical Warning (10920)` ×5 – Incomplete Partial Association
+
+Fünf Instanzen im Top-Level assoziierten ihre Vektor-Ports **bitweise** und ließen dabei
+Bits offen (`=> open` oder gar nicht genannt):
+
+| Instanz | Port | offen |
+|---|---|---|
+| `EEPROM` (`EEprom`) | `w_trigger` | 3 von 5 |
+| `B3_IO` (`r11696`) | `sound_and_coils_out` | 1 von 16 |
+| `B1_IO` (`rA1761`) | `io_port_out` | 9 von 16 |
+| `B2_IO` (`rA17xx`) | `io_port_out` | 3 von 16 |
+| `COUNTER4040` (`Counter_74HC4040`) | `Q` | 2 von 12 |
+
+**Fix-Muster:** ein vollständiges Zwischensignal deklarieren, den Port am Stück
+anschließen, die benutzten Bits darunter abgreifen. Beim Eingangsport `w_trigger` werden
+die ungenutzten Bits explizit auf `'0'` gelegt.
+
+```vhdl
+signal b1_io_port_out : std_logic_vector(15 downto 0);
+...
+    io_port_out => b1_io_port_out
+);
+HM6508_din  <= b1_io_port_out(1);
+counter_clk <= b1_io_port_out(4);
+...
+```
+
+Die unbenutzten Bits entfernt die Synthese. **Nachweis der Verhaltensneutralität:** die
+Synthese-Zahlen blieben auf die Ziffer gleich (3563 comb / 2352 reg / 33792 bit).
+
+Die `.sdc` ist davon **nicht** betroffen: sie referenziert den Knoten *innerhalb* der
+Entity (`rA1761:B1_IO|io_port_out[4]`), nicht das Signal im Top-Level.
+
+### `Warning (15610)` ×2 und `(21074)` – `S3`, `S6`
+
+Die beiden Taster des FPGA-Boards (`PIN_24`, `PIN_25`) waren als Eingänge deklariert und
+mit Pins belegt, aber nirgends benutzt. Entfernt aus der Entity **und** aus beiden
+`variants/<n>/pins.tcl`. Pinzahl 82 → 80.
+
+> Werden sie gebraucht, müssen Port **und** die Zeile in `pins.tcl` wieder hinein –
+> ein Port ohne Pin-Location ist für Quartus ein benutzter Pin.
+
+## Verbleibende 8 Warnungen – bewusst akzeptiert
+
+Identisch in beiden Varianten. Keine davon ist eine Critical Warning.
 
 | Warnung | Stelle | Grund |
 |---|---|---|
-| `Critical 10920` ×5 | `RecelFA.vhd` 455/614/672/704/806 | beabsichtigte ungenutzte Output-Bits via `open` (`w_trigger`, `sound_and_coils_out`, `io_port_out` ×2, `Q`) |
 | `19016`/`19017` | `cpu_clk` Mux | inhärent zur Turbo/Normal-Taktumschaltung; von Quartus „protected" |
 | `13024`/`13410` ×2 | `E_DISPLAY_IC_N`, `Disp_Enable` | absichtlich fest auf `'0'` |
-| `21074`/`15610` ×2 | `S3`, `S6` | ungenutzte Board-Taster, reserviert |
+| `15714` | „Missing drive strength" an allen 68 Ausgangspins | behebbar nur durch ein `CURRENT_STRENGTH_NEW` **je Pin** – das verdoppelt beide `pins.tcl` für eine Voreinstellung, die passt, und Treiberstärke ist eine Hardware-Entscheidung. Bewusst nicht gemacht. |
+| `169177` | AN447 | informativer 3.3-V-Interface-Hinweis, betrifft 10 Pins |
 | `292013` | LogicLock | Lizenz-Limit der Lite Edition – nicht eliminierbar |
-| `15714` | I/O-Assignments | optional via per-Pin I/O-Standard behebbar |
-| `169177` | AN447 | informativer 3.3-V-Interface-Hinweis |
 
-**Mögliche spätere Schritte** (falls eine komplett saubere Ausgabe gewünscht):
-- die 5 `10920` durch Port-Map-Umbau (Vektor-Zwischensignale statt `open`) echt beheben
-- `S3`/`S6` aus Entity + QSF entfernen
-- alle akzeptierten IDs per Quartus **Message Suppression** ausblenden
+**Keine Message Suppression.** Sie würde künftige echte Meldungen derselben IDs
+mit ausblenden.
 
 ## Neu kompilieren / verifizieren
 
-```bash
-cd "N:/Projekte/FPGA Recel/source_RecelFA_Cyclone_10"
-/c/intelFPGA_lite/22.1std/quartus/bin64/quartus_sh --flow compile RecelFA
-# nur Timing (schnell): quartus_sta RecelFA -c RecelFA
+```powershell
+cd "N:\Projekte\FPGA Recel\FPGA_source"
+powershell -File scripts\check.ps1 -Fit          # beide Varianten, Ressourcen + Timing
+powershell -File scripts\build.ps1 cyclone_10    # voller Flow inkl. .jic
 ```
 
-Prüfen: `output_files/RecelFA.sta.summary` (alle Slacks ≥ 0),
-`output_files/RecelFA.map.rpt` / `.fit.rpt` (nur noch die akzeptierten Warnungen).
-Programmierdatei: `output_files/RecelFA.sof` (bzw. `RecelFA.jic` via `RecelFA.cof` neu erzeugen).
+Prüfen: alle Slacks ≥ 0 in `variants/<n>/output_files/RecelFA.sta.summary`,
+Meldungsliste in `.map.rpt` / `.fit.rpt` gegen die Tabelle oben.

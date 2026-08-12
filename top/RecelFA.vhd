@@ -76,10 +76,12 @@ entity RecelFA is
 		reset_sw  : in std_logic; 	
 		I_LED1_SD : out std_logic; 	-- LED_SD_Error	: out std_logic; 	
 		I_LED2_D1 : out std_logic; 	--LED1		: out std_logic; 	
-		I_LED3_D2 : out std_logic; 	--LED2		: out std_logic; 	
-		S3  : in std_logic; 			
-		S6  : in std_logic; 	
-		--tone : out std_logic; 	
+		I_LED3_D2 : out std_logic; 	--LED2		: out std_logic;
+		-- Die Taster S3 (PIN_24) und S6 (PIN_25) des FPGA-Boards waren als Eingaenge
+		-- deklariert, aber nie benutzt - Quartus meldete dafuer Warning 15610 und 21074.
+		-- Sie sind hier entfernt; werden sie gebraucht, muessen Port UND die Zeile in
+		-- variants/<n>/pins.tcl wieder hinein.
+		--tone : out std_logic;
 		sound : out std_logic; 	
 		music : out std_logic; 	
 		
@@ -288,6 +290,17 @@ signal opt_sound_effects :  std_logic;
 signal opt_speed_boot :  std_logic;
 signal opt_disable_org_sound :  std_logic;
 
+-- Vollstaendige Zwischensignale fuer Ports, von denen nur ein Teil der Bits gebraucht
+-- wird. Frueher standen dort bitweise Portmaps mit 'open' bzw. gar keinem Eintrag, was
+-- Quartus je Instanz mit Critical Warning (10920) "Incomplete Partial Association"
+-- quittiert hat. Der Port wird jetzt am Stueck angeschlossen und die benutzten Bits
+-- werden hier abgegriffen; die unbenutzten optimiert die Synthese weg.
+signal eeprom_w_trigger	: std_logic_vector(4 downto 0);
+signal b3_sound_coils	: std_logic_vector(15 downto 0);
+signal b1_io_port_out	: std_logic_vector(15 downto 0);
+signal b2_io_port_out	: std_logic_vector(15 downto 0);
+signal counter4040_q	: std_logic_vector(11 downto 0);
+
 -- SW version
 -- Die fuehrende Ziffer kennzeichnet das BOARD und kommt aus
 -- variants/<name>/variant_pkg.vhd (Cyclone IV = 1, Cyclone 10 = 2); SW_SUB1/SW_SUB2
@@ -478,14 +491,18 @@ port map(
    o_SPI_MOSI => MOSI_EEPROM,
    o_SPI_CS_n => CS_EEPROM,
 	-- write trigger
-	w_trigger(1) => eeprom_trigger, -- save whenever Recel save
-	w_trigger(0) => '0', --opt_trigger_test, -- as trigger for testing
+	w_trigger => eeprom_w_trigger,
 	-- init trigger (no read, RAM will be zero)
 	i_init_Flag => opt_nvram_init, -- 0 if option Dip1 is set 
 	-- signal when finished
 	done	=> boot_phase(3), -- set to '1' when first read of eeprom and write to cmos is done
 	is_active => eeprom_is_active
 	);	
+
+-- w_trigger ist 5 Bit breit, benutzt wird nur Bit 1 (Speichern, wenn Recel speichert).
+-- Bit 0 war schon immer fest '0' (Testtrigger), die oberen drei blieben frueher offen.
+-- Konstante Bits aendern sich nie, die Vergleichslogik dahinter faellt weg.
+eeprom_w_trigger <= "000" & eeprom_trigger & '0';
 
 -- uart_print_addr was driven by the (disabled) uart_send debug block and is
 -- otherwise constant 0, so the read-out address defaults to 0 here.
@@ -635,18 +652,9 @@ port map(
 		  io_cmd   => io_cmd,
 		  io_accu  => io_accu,
 		  		  
-		  sound_and_coils_out(0) => sound_10, --IO6-8
-		  sound_and_coils_out(1) => sound_100, --IO6-4
-		  sound_and_coils_out(2) => sound_1K, --IO6-2
-		  sound_and_coils_out(3) => sound_10K, --IO6-1
-		  sound_and_coils_out(4) => sound_100K, --IO5-8
-		  
-		  sound_and_coils_out(5) => open,
-		  sound_and_coils_out(6) => COIL_Knocker, --open, --RTH for DEBUG 
-		  sound_and_coils_out(7) => COIL_Ball_Home,
-		  sound_and_coils_out(14 downto 8) => Coil(6 downto 0), --open, --RTH for DEBUG 
-		  sound_and_coils_out(15) => int_coil_7,
-		  
+		  -- Aufteilung siehe unterhalb der Instanz. Bit 5 wird nicht gebraucht.
+		  sound_and_coils_out => b3_sound_coils,
+
 		  group_7_out(0) => int_bonus(3),
 		  group_7_out(1) => int_bonus(2),
 		  group_7_out(2) => int_bonus(1),
@@ -657,9 +665,21 @@ port map(
 		  group_8_out(2) => Lite_Double_Bonus,
 		  group_8_out(3) => Play_Signal
 
-	);		
+	);
 
-		
+-- Aufteilung von sound_and_coils_out des B3 (r11696).
+Sound_10   <= b3_sound_coils(0);  --IO6-8
+Sound_100  <= b3_sound_coils(1);  --IO6-4
+Sound_1K   <= b3_sound_coils(2);  --IO6-2
+Sound_10K  <= b3_sound_coils(3);  --IO6-1
+Sound_100K <= b3_sound_coils(4);  --IO5-8
+-- Bit 5 ist auf der Platine nicht herausgefuehrt.
+COIL_Knocker     <= b3_sound_coils(6);
+COIL_Ball_Home   <= b3_sound_coils(7);
+Coil(6 downto 0) <= b3_sound_coils(14 downto 8);
+int_coil_7       <= b3_sound_coils(15);
+
+
 B1_ROM: entity work.B1_ROM -- B1 System ROM 1KByte
 port map(
 	address	=> B1_rom_addr,
@@ -697,19 +717,19 @@ port map(
 		  
 		  io_port_in(0) => HM6508_dout,   --inverter on CPU but different logik ? RTH
 		  io_port_in(15 downto 1)  => "111111111111111", --"0000000000000000",		  
-		  io_port_out(0) => open,
-		  io_port_out(1) => HM6508_din,
-		  io_port_out(2) => HM6508_enable,
-		  io_port_out(3) => HM6508_wr,
-		  io_port_out(4) => counter_clk,
-		  io_port_out(5) => counter_clr,
-		  io_port_out(8 downto 6) => open,
-		  io_port_out(9) => Expander_MX_DR,
-		  io_port_out(13 downto 10) => open,
-		  io_port_out(14) => Rejector_Control,
-		  io_port_out(15) => open
+		  -- Aufteilung siehe unterhalb der Instanz.
+		  io_port_out => b1_io_port_out
 
-	);	
+	);
+
+-- Aufteilung von io_port_out des B1 (rA1761). Nicht herausgefuehrt: 0, 6..8, 10..13, 15.
+HM6508_din       <= b1_io_port_out(1);
+HM6508_enable    <= b1_io_port_out(2);
+HM6508_wr        <= b1_io_port_out(3);
+counter_clk      <= b1_io_port_out(4);
+counter_clr      <= b1_io_port_out(5);
+Expander_MX_DR   <= b1_io_port_out(9);
+Rejector_Control <= b1_io_port_out(14);
 
 --0x2 --B2 A1762-13    16 output control 
 B2_IO: entity work.rA17xx 
@@ -728,23 +748,25 @@ port map(
 		  io_port => io_port,
 		  
 		  io_port_in(15 downto 0)  => "0000000000000000",
-		  io_port_out(15) => open, --Lite_28,
-		  io_port_out(14) => open, --Lite_24,
-		  io_port_out(13) => open, --Lite_22,
-		  io_port_out(12) => Lite_21,
-		  io_port_out(11) => Lite_38,
-		  io_port_out(10) => Lite_34,
-		  io_port_out(9) => Lite_32,
-		  io_port_out(8) => Lite_31,
-		  io_port_out(7) => int_Lite_48,
-		  io_port_out(6) => int_Lite_44,
-		  io_port_out(5) => Lite_42,
-		  io_port_out(4) => int_Lite_41,
-		  io_port_out(3) => int_Lite_58,
-		  io_port_out(2) => int_Lite_54,
-		  io_port_out(1) => int_Lite_52,
-		  io_port_out(0) => int_Lite_51
-	);	
+		  -- Aufteilung siehe unterhalb der Instanz.
+		  io_port_out => b2_io_port_out
+	);
+
+-- Aufteilung von io_port_out des B2 (rA17xx).
+-- Nicht herausgefuehrt: 13 (Lite_22), 14 (Lite_24), 15 (Lite_28).
+Lite_21     <= b2_io_port_out(12);
+Lite_38     <= b2_io_port_out(11);
+Lite_34     <= b2_io_port_out(10);
+Lite_32     <= b2_io_port_out(9);
+Lite_31     <= b2_io_port_out(8);
+int_Lite_48 <= b2_io_port_out(7);
+int_Lite_44 <= b2_io_port_out(6);
+Lite_42     <= b2_io_port_out(5);
+int_Lite_41 <= b2_io_port_out(4);
+int_Lite_58 <= b2_io_port_out(3);
+int_Lite_54 <= b2_io_port_out(2);
+int_Lite_52 <= b2_io_port_out(1);
+int_Lite_51 <= b2_io_port_out(0);
 	
 
 --B5 10788 Display driver
@@ -814,12 +836,16 @@ HM6508_RAM: entity work.HM6508_RAM -- 1024 x 1bit & 256 x 4bit
 	
 	
 -- clear via inverter on CPU		
-COUNTER4040: entity work.Counter_74HC4040 
+COUNTER4040: entity work.Counter_74HC4040
 port map(
 	CLK => counter_clk,
 	CLR => not counter_clr,
-	Q(9 downto 0) => HM6508_addr
-	);	
+	Q => counter4040_q
+	);
+
+-- Der 4040 zaehlt 12 Bit, der HM6508 hat 10 Adressleitungen. Bit 10 und 11 bleiben
+-- unbenutzt und werden von der Synthese entfernt.
+HM6508_addr <= counter4040_q(9 downto 0);
 
 -- 9600 baud send clock
 dfp_clk_g: entity work.dfp_clk_gen 

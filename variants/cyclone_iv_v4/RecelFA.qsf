@@ -120,8 +120,6 @@ set_location_assignment PIN_125 -to Disp_DA[0]
 set_location_assignment PIN_126 -to Disp_DB[0]
 set_location_assignment PIN_68 -to Bonus[0]
 set_location_assignment PIN_111 -to DOA[0]
-set_location_assignment PIN_24 -to S3
-set_location_assignment PIN_25 -to S6
 set_location_assignment PIN_88 -to DIA[0]
 set_location_assignment PIN_1 -to I_LED1_SD
 set_location_assignment PIN_3 -to I_LED2_D1
